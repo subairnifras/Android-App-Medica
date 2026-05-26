@@ -1,0 +1,6 @@
+{
+  "name": "Medica",
+  "description": "Modern Doctor Appointment Booking and Patient Record Management System with real-time Firebase Authentication & Firestore Database storage.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
