@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "395239455795",
+    "project_id": "android-app-medica",
+    "storage_bucket": "android-app-medica.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:395239455795:android:8c5cffe0a85974b8e2b746",
+        "android_client_info": {
+          "package_name": "com.aistudio.medica.uxbvtq"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDAv6UjUDgzxDJaq4DJcloKycQVLaOuj0M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
