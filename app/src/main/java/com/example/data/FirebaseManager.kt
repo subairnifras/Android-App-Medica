@@ -7,7 +7,6 @@ import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import com.example.BuildConfig
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,7 +23,7 @@ object FirebaseManager {
     private var authInstance: FirebaseAuth? = null
     private var firestoreInstance: FirebaseFirestore? = null
 
-    // Fallback/Simulated Data Engine (to guarantee 100% functionality and zero crashes)
+    // Fallback/Simulated Data Engine
     private val _currentUserFlow = MutableStateFlow<UserProfile?>(null)
     val currentUserFlow: StateFlow<UserProfile?> = _currentUserFlow.asStateFlow()
 
@@ -133,151 +132,78 @@ object FirebaseManager {
         if (isFirebaseInitialized) return
 
         try {
-            // Retrieve keys from BuildConfig if existing
-            val apiKey = getBuildConfigValue("FIREBASE_API_KEY")
-            val appId = getBuildConfigValue("FIREBASE_APP_ID")
-            val projectId = getBuildConfigValue("FIREBASE_PROJECT_ID")
-
-            if (!apiKey.isNullOrEmpty() && apiKey != "YOUR_FIREBASE_API_KEY" && !appId.isNullOrEmpty() && !projectId.isNullOrEmpty()) {
-                Log.d(TAG, "Configuring Firebase programmatically with provided options.")
-                
-                // If FirebaseApp is already initialized under the default name (e.g., from a auto-generated google-services config resource),
-                // use that, otherwise initialize it. This avoids IllegalStateException of duplicate registrations.
-                val apps = com.google.firebase.FirebaseApp.getApps(context)
-                if (apps.isEmpty()) {
-                    val options = FirebaseOptions.Builder()
-                        .setApiKey(apiKey)
-                        .setApplicationId(appId)
-                        .setProjectId(projectId)
-                        .build()
-                    FirebaseApp.initializeApp(context, options)
-                }
-                
+            // Check if Firebase is already initialized via google-services.json
+            val apps = FirebaseApp.getApps(context)
+            if (apps.isNotEmpty()) {
+                Log.d(TAG, "Firebase already initialized via Provider.")
+                setupInstances()
                 isFirebaseInitialized = true
-                authInstance = FirebaseAuth.getInstance()
-                firestoreInstance = FirebaseFirestore.getInstance()
-                Log.d(TAG, "Firebase successfully initialized programmatically!")
-
-                // Listen to Real-time changes from Firestore if authenticated
-                authInstance?.addAuthStateListener { firebaseAuth ->
-                    try {
-                        val firebaseUser = firebaseAuth.currentUser
-                        if (firebaseUser != null) {
-                            fetchRealtimeProfile(firebaseUser.uid)
-                            fetchRealtimeAppointments(firebaseUser.uid)
-                            fetchRealtimeChats(firebaseUser.uid)
-                        } else {
-                            _currentUserFlow.value = null
-                        }
-                    } catch (t: Throwable) {
-                        Log.e(TAG, "Auth state listener callback exception caught: ${t.message}", t)
-                    }
-                }
             } else {
-                Log.w(TAG, "Firebase credentials not set or incomplete. Running in Simulation/Local Mode.")
+                // If not, try manual or log warning
+                Log.w(TAG, "Firebase not initialized. Ensure google-services.json is present and plugin is applied.")
+                // Attempt standard initialization anyway
+                FirebaseApp.initializeApp(context)
+                setupInstances()
+                isFirebaseInitialized = true
             }
         } catch (e: Throwable) {
-            Log.e(TAG, "Failed programmatically initialize Firebase, switching to Local Sandbox mode: ${e.message}", e)
+            Log.e(TAG, "Failed to initialize Firebase: ${e.message}", e)
         }
     }
 
-    private fun getBuildConfigValue(fieldName: String): String? {
-        return try {
-            val clazz = Class.forName("${contextPackageName}.BuildConfig")
-            val field = clazz.getField(fieldName)
-            field.get(null) as? String
-        } catch (e: Throwable) {
-            null
+    private fun setupInstances() {
+        authInstance = FirebaseAuth.getInstance()
+        firestoreInstance = FirebaseFirestore.getInstance()
+        
+        authInstance?.addAuthStateListener { firebaseAuth ->
+            val firebaseUser = firebaseAuth.currentUser
+            if (firebaseUser != null) {
+                fetchRealtimeProfile(firebaseUser.uid)
+                fetchRealtimeAppointments(firebaseUser.uid)
+                fetchRealtimeChats(firebaseUser.uid)
+            } else {
+                _currentUserFlow.value = null
+            }
         }
     }
 
-    private val contextPackageName: String
-        get() = "com.example" // fallback, matches our namespace
-
-    // Real-time listener for User Profile in firestore
     private fun fetchRealtimeProfile(uid: String) {
-        try {
-            val db = firestoreInstance ?: return
-            db.collection("users").document(uid)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        Log.e(TAG, "Listen to profile failed: ${error.message}")
-                        return@addSnapshotListener
-                    }
-                    if (snapshot != null && snapshot.exists()) {
-                        try {
-                            val profile = snapshot.toObject(UserProfile::class.java)
-                            _currentUserFlow.value = profile
-                        } catch (t: Throwable) {
-                            Log.e(TAG, "Parsing profile snap failed: ${t.message}", t)
-                        }
+        firestoreInstance?.collection("users")?.document(uid)
+            ?.addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                if (snapshot != null && snapshot.exists()) {
+                    snapshot.toObject(UserProfile::class.java)?.let {
+                        _currentUserFlow.value = it
                     }
                 }
-        } catch (t: Throwable) {
-            Log.e(TAG, "fetchRealtimeProfile subscription failed: ${t.message}", t)
-        }
+            }
     }
 
-    // Real-time listener for Appointments in firestore
     private fun fetchRealtimeAppointments(uid: String) {
-        try {
-            val db = firestoreInstance ?: return
-            db.collection("appointments")
-                .whereEqualTo("userId", uid)
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        Log.e(TAG, "Listen to appointments failed: ${error.message}")
-                        return@addSnapshotListener
-                    }
-                    if (snapshot != null) {
-                        try {
-                            val list = snapshot.toObjects(Appointment::class.java)
-                            _appointmentsFlow.value = list.sortedBy { it.date + " " + it.time }
-                        } catch (t: Throwable) {
-                            Log.e(TAG, "Parsing appointments snap failed: ${t.message}", t)
-                        }
-                    }
+        firestoreInstance?.collection("appointments")
+            ?.whereEqualTo("userId", uid)
+            ?.addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                if (snapshot != null) {
+                    val list = snapshot.toObjects(Appointment::class.java)
+                    _appointmentsFlow.value = list.sortedBy { it.date + " " + it.time }
                 }
-        } catch (t: Throwable) {
-            Log.e(TAG, "fetchRealtimeAppointments subscription failed: ${t.message}", t)
-        }
+            }
     }
 
-    // Real-time listener for Chats in firestore
     private fun fetchRealtimeChats(uid: String) {
-        try {
-            val db = firestoreInstance ?: return
-            db.collection("chats")
-                .addSnapshotListener { snapshot, error ->
-                    if (error != null) {
-                        Log.e(TAG, "Listen to chats failed: ${error.message}")
-                        return@addSnapshotListener
-                    }
-                    if (snapshot != null) {
-                        try {
-                            val list = snapshot.toObjects(Chat::class.java)
-                            _chatsFlow.value = list
-                        } catch (t: Throwable) {
-                            Log.e(TAG, "Parsing chats snap failed: ${t.message}", t)
-                        }
-                    }
+        firestoreInstance?.collection("chats")
+            ?.addSnapshotListener { snapshot, error ->
+                if (error != null) return@addSnapshotListener
+                if (snapshot != null) {
+                    _chatsFlow.value = snapshot.toObjects(Chat::class.java)
                 }
-        } catch (t: Throwable) {
-            Log.e(TAG, "fetchRealtimeChats subscription failed: ${t.message}", t)
-        }
+            }
     }
 
-    fun isUsingRealFirebase(): Boolean {
-        return isFirebaseInitialized && authInstance != null
-    }
+    fun isUsingRealFirebase(): Boolean = isFirebaseInitialized && authInstance != null
 
-    // AUTH APIs
-    fun signUp(
-        email: String,
-        password: String,
-        onSuccess: () -> Unit,
-        onFailure: (String) -> Unit
-    ) {
+    fun signUp(email: String, password: String, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
         val auth = authInstance
         if (isUsingRealFirebase() && auth != null) {
             auth.createUserWithEmailAndPassword(email, password)
@@ -288,144 +214,76 @@ object FirebaseManager {
                             uid = user.uid,
                             email = email,
                             firstName = email.substringBefore("@").replaceFirstChar { it.uppercase() },
-                            lastName = "Kelvin",
+                            lastName = "User",
                             dob = "1995-10-10",
                             gender = "Male",
                             profilePicUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop"
                         )
                         _currentUserFlow.value = initialProfile
-                        saveUserProfile(initialProfile, { onSuccess() }, { onFailure(it) })
+                        saveUserProfile(initialProfile, onSuccess, onFailure)
                     } else {
-                        onFailure("Failed creating user in Firebase")
+                        onFailure("Failed creating user")
                     }
                 }
-                .addOnFailureListener {
-                    onFailure(it.localizedMessage ?: "Firebase Authentication error")
-                }
+                .addOnFailureListener { onFailure(it.localizedMessage ?: "Auth error") }
         } else {
-            // Local simulation Mode
-            if (email.contains("@") && password.length >= 6) {
-                val simulatedUid = UUID.randomUUID().toString()
-                val profile = UserProfile(
-                    uid = simulatedUid,
-                    email = email,
-                    firstName = "James",
-                    lastName = "Kelvin",
-                    dob = "1994-04-12",
-                    gender = "Male",
-                    profilePicUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop"
-                )
-                _currentUserFlow.value = profile
-                onSuccess()
-            } else {
-                onFailure("Please enter a valid email and matching passwords (min 6 characters)")
-            }
+            onFailure("Firebase not initialized.")
         }
     }
 
-    fun saveUserProfile(
-        profile: UserProfile,
-        onSuccess: () -> Unit = {},
-        onFailure: (String) -> Unit = {}
-    ) {
+    fun saveUserProfile(profile: UserProfile, onSuccess: () -> Unit = {}, onFailure: (String) -> Unit = {}) {
         val db = firestoreInstance
         if (isUsingRealFirebase() && db != null) {
-            db.collection("users").document(profile.uid)
-                .set(profile)
+            db.collection("users").document(profile.uid).set(profile)
                 .addOnSuccessListener {
                     _currentUserFlow.value = profile
                     onSuccess()
                 }
-                .addOnFailureListener {
-                    onFailure(it.localizedMessage ?: "Failed writing profile to Firestore")
-                }
+                .addOnFailureListener { onFailure(it.localizedMessage ?: "Firestore error") }
         } else {
             _currentUserFlow.value = profile
             onSuccess()
         }
     }
 
-    fun login(
-        email: String,
-        password: String,
-        onSuccess: () -> Unit,
-        onFailure: (String) -> Unit
-    ) {
+    fun login(email: String, password: String, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
         val auth = authInstance
         if (isUsingRealFirebase() && auth != null) {
             auth.signInWithEmailAndPassword(email, password)
-                .addOnSuccessListener {
-                    onSuccess()
-                }
-                .addOnFailureListener {
-                    onFailure(it.localizedMessage ?: "Authentication details incorrect")
-                }
+                .addOnSuccessListener { onSuccess() }
+                .addOnFailureListener { onFailure(it.localizedMessage ?: "Login failed") }
         } else {
-            // Simulated login: accept any user
-            if (email.isNotEmpty() && password.isNotEmpty()) {
-                val userMail = email.ifEmpty { "jameskelvin@gmail.com" }
-                val profile = UserProfile(
-                    uid = "simulated_user_123",
-                    email = userMail,
-                    firstName = "James",
-                    lastName = "Kelvin",
-                    dob = "1994-04-12",
-                    gender = "Male",
-                    profilePicUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop"
-                )
-                _currentUserFlow.value = profile
-                onSuccess()
-            } else {
-                onFailure("Email and Password fields are required!")
-            }
+            onFailure("Firebase not initialized.")
         }
     }
 
     fun logout() {
-        val auth = authInstance
-        if (isUsingRealFirebase() && auth != null) {
-            auth.signOut()
-        }
+        authInstance?.signOut()
         _currentUserFlow.value = null
-        // maintain list in simulation or clear if logged out
     }
 
-    // APPOINTMENTS
-    fun addAppointment(
-        appointment: Appointment,
-        onSuccess: () -> Unit,
-        onFailure: (String) -> Unit
-    ) {
+    fun addAppointment(appointment: Appointment, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
         val db = firestoreInstance
         val item = if (appointment.id.isEmpty()) appointment.copy(id = UUID.randomUUID().toString()) else appointment
 
         if (isUsingRealFirebase() && db != null) {
-            db.collection("appointments").document(item.id)
-                .set(item)
+            db.collection("appointments").document(item.id).set(item)
                 .addOnSuccessListener { onSuccess() }
-                .addOnFailureListener { onFailure(it.localizedMessage ?: "Firestore write error") }
+                .addOnFailureListener { onFailure(it.localizedMessage ?: "Firestore error") }
         } else {
-            // Simulated add
             val currentList = _appointmentsFlow.value.toMutableList()
-            currentList.removeAll { it.id == item.id }
             currentList.add(item)
             _appointmentsFlow.value = currentList
             onSuccess()
         }
     }
 
-    fun updateAppointmentStatus(
-        appointmentId: String,
-        status: String,
-        onSuccess: () -> Unit = {},
-        onFailure: (String) -> Unit = {}
-    ) {
+    fun updateAppointmentStatus(appointmentId: String, status: String, onSuccess: () -> Unit = {}, onFailure: (String) -> Unit = {}) {
         val db = firestoreInstance
         if (isUsingRealFirebase() && db != null) {
-            db.collection("appointments").document(appointmentId)
-                .update("status", status)
+            db.collection("appointments").document(appointmentId).update("status", status)
                 .addOnSuccessListener { onSuccess() }
-                .addOnFailureListener { onFailure(it.localizedMessage ?: "Firestore update error") }
+                .addOnFailureListener { onFailure(it.localizedMessage ?: "Firestore error") }
         } else {
             val currentList = _appointmentsFlow.value.toMutableList()
             val index = currentList.indexOfFirst { it.id == appointmentId }
@@ -437,7 +295,6 @@ object FirebaseManager {
         }
     }
 
-    // REAL-TIME MESSAGING CHATS FLOW
     fun getMessagesFlow(chatId: String): Flow<List<Message>> {
         val db = firestoreInstance
         if (isUsingRealFirebase() && db != null) {
@@ -450,14 +307,12 @@ object FirebaseManager {
                             return@addSnapshotListener
                         }
                         if (snapshot != null) {
-                            val messages = snapshot.toObjects(Message::class.java)
-                            trySend(messages)
+                            trySend(snapshot.toObjects(Message::class.java))
                         }
                     }
                 awaitClose { listener.remove() }
             }
         } else {
-            // Simulated local messages flow
             if (!messagesMap.containsKey(chatId)) {
                 messagesMap[chatId] = MutableStateFlow(emptyList())
             }
@@ -475,70 +330,19 @@ object FirebaseManager {
 
         val db = firestoreInstance
         if (isUsingRealFirebase() && db != null) {
-            // Write to Firestore db
-            db.collection("chats").document(chatId).collection("messages").document(msg.id)
-                .set(msg)
+            db.collection("chats").document(chatId).collection("messages").document(msg.id).set(msg)
                 .addOnSuccessListener {
-                    // Update last message in chat document
-                    db.collection("chats").document(chatId)
-                        .update("lastMessage", text, "lastMessageTime", "Just now")
+                    db.collection("chats").document(chatId).update("lastMessage", text, "lastMessageTime", "Just now")
                 }
         } else {
-            // Update local map flow
-            if (!messagesMap.containsKey(chatId)) {
-                messagesMap[chatId] = MutableStateFlow(emptyList())
-            }
-            val flow = messagesMap[chatId]!!
-            val currentMessages = flow.value.toMutableList()
-            currentMessages.add(msg)
-            flow.value = currentMessages
-
-            // Update in chats list
+            val flow = messagesMap.getOrPut(chatId) { MutableStateFlow(emptyList()) }
+            flow.value = flow.value + msg
+            
             val chatsList = _chatsFlow.value.toMutableList()
             val index = chatsList.indexOfFirst { it.id == chatId }
             if (index != -1) {
-                chatsList[index] = chatsList[index].copy(
-                    lastMessage = text,
-                    lastMessageTime = "Just now"
-                )
+                chatsList[index] = chatsList[index].copy(lastMessage = text, lastMessageTime = "Just now")
                 _chatsFlow.value = chatsList
-            }
-
-            // Simple doctor auto-reply after a short delay
-            if (senderId == "user") {
-                val docResponse = when {
-                    text.contains("hello", ignoreCase = true) || text.contains("hi", ignoreCase = true) -> "Hello! I hope you are doing well today. How can I assist you with your health?"
-                    text.contains("headache", ignoreCase = true) -> "I recommend resting in a calm dark room and keeping hydrated. If it persists, let's look at a pain reliever dosage."
-                    text.contains("thank", ignoreCase = true) -> "You are welcome. Take care and let me know if you need any follow-up!"
-                    else -> "Thank you for the message. I have recorded your symptom and we will discuss it in detail during our scheduled consultation."
-                }
-                // Simulate delay
-                Thread {
-                    try {
-                        Thread.sleep(1200)
-                        val replyMsg = Message(
-                            id = UUID.randomUUID().toString(),
-                            senderId = "doctor",
-                            text = docResponse,
-                            timestamp = System.currentTimeMillis()
-                        )
-                        val updated = flow.value.toMutableList()
-                        updated.add(replyMsg)
-                        flow.value = updated
-
-                        val freshChats = _chatsFlow.value.toMutableList()
-                        val chatIdx = freshChats.indexOfFirst { it.id == chatId }
-                        if (chatIdx != -1) {
-                            freshChats[chatIdx] = freshChats[chatIdx].copy(
-                                lastMessage = docResponse,
-                                lastMessageTime = "1min ago"
-                            )
-                            _chatsFlow.value = freshChats
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }.start()
             }
         }
     }
