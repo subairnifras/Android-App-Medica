@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -37,6 +38,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
+import com.example.R
 import com.example.data.*
 import com.example.ui.theme.MedicaBlue
 import com.example.ui.theme.MedicaLightBg
@@ -158,11 +160,10 @@ fun SplashScreen(navController: NavController, isLoggedIn: Boolean) {
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Favorite,
-                    contentDescription = "Medical Icon",
-                    tint = MedicaBlue,
-                    modifier = Modifier.size(64.dp)
+                Image(
+                    painter = painterResource(id = R.drawable.medica_logo_1779705445131),
+                    contentDescription = "App Logo",
+                    modifier = Modifier.size(80.dp)
                 )
             }
 
@@ -230,11 +231,10 @@ fun LoginScreen(navController: NavController, viewModel: MedicaViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Favorite,
-                        contentDescription = "Logo",
-                        tint = MedicaBlue,
-                        modifier = Modifier.size(36.dp)
+                    Image(
+                        painter = painterResource(id = R.drawable.medica_logo_1779705445131),
+                        contentDescription = "App Logo",
+                        modifier = Modifier.size(42.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -472,11 +472,10 @@ fun SignUpScreen(navController: NavController, viewModel: MedicaViewModel) {
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Favorite,
-                        contentDescription = "Logo",
-                        tint = MedicaBlue,
-                        modifier = Modifier.size(36.dp)
+                    Image(
+                        painter = painterResource(id = R.drawable.medica_logo_1779705445131),
+                        contentDescription = "App Logo",
+                        modifier = Modifier.size(42.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -878,7 +877,7 @@ fun MainHubScreen(navController: NavController, viewModel: MedicaViewModel) {
 @Composable
 fun HomeScreenContent(navController: NavController, viewModel: MedicaViewModel) {
     val searchVal by viewModel.searchQuery.collectAsStateWithLifecycle()
-    val doctorsList by viewModel.filteredDoctors.collectAsStateWithLifecycle()
+    val doctorsList by viewModel.doctors.collectAsStateWithLifecycle()
     val appointmentsList by viewModel.appointments.collectAsStateWithLifecycle()
     val userProfile by viewModel.currentUser.collectAsStateWithLifecycle()
 
@@ -970,7 +969,7 @@ fun HomeScreenContent(navController: NavController, viewModel: MedicaViewModel) 
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            val doc = viewModel.doctors.firstOrNull { it.id == currentUpcoming.doctorId }
+                            val doc = viewModel.doctors.value.firstOrNull { it.id == currentUpcoming.doctorId }
                             if (doc != null) {
                                 viewModel.selectedDoctor = doc
                                 navController.navigate(Routes.DOCTOR_DETAILS)
@@ -1345,7 +1344,7 @@ fun AppointmentsScreenContent(navController: NavController, viewModel: MedicaVie
 
                                     Button(
                                         onClick = {
-                                            val doc = viewModel.doctors.firstOrNull { it.id == entry.doctorId }
+                                            val doc = viewModel.doctors.value.firstOrNull { it.id == entry.doctorId }
                                             if (doc != null) {
                                                 viewModel.selectedDoctor = doc
                                                 navController.navigate(Routes.BOOK_CALENDAR)
@@ -1360,7 +1359,7 @@ fun AppointmentsScreenContent(navController: NavController, viewModel: MedicaVie
                                 } else {
                                     Button(
                                         onClick = {
-                                            val doc = viewModel.doctors.firstOrNull { it.id == entry.doctorId }
+                                            val doc = viewModel.doctors.value.firstOrNull { it.id == entry.doctorId }
                                             if (doc != null) {
                                                 viewModel.selectedDoctor = doc
                                                 navController.navigate(Routes.BOOK_CALENDAR)
@@ -1607,7 +1606,8 @@ fun ProfileScreenContent(navController: NavController, viewModel: MedicaViewMode
 // 6. SCREEN: DOCTOR DETAILS
 @Composable
 fun DoctorDetailsScreen(navController: NavController, viewModel: MedicaViewModel) {
-    val doc = viewModel.selectedDoctor ?: viewModel.doctors.first()
+    val doctors by viewModel.doctors.collectAsStateWithLifecycle()
+    val doc = viewModel.selectedDoctor ?: doctors.firstOrNull() ?: Doctor()
 
     Scaffold(
         modifier = Modifier
@@ -2251,7 +2251,8 @@ fun BookingPaymentScreen(navController: NavController, viewModel: MedicaViewMode
 // 11. BOOKING STEPS: REVIEW & SUBMIT
 @Composable
 fun BookingReviewScreen(navController: NavController, viewModel: MedicaViewModel) {
-    val d = viewModel.selectedDoctor ?: viewModel.doctors.first()
+    val doctors by viewModel.doctors.collectAsStateWithLifecycle()
+    val d = viewModel.selectedDoctor ?: doctors.firstOrNull() ?: Doctor()
 
     Scaffold(
         modifier = Modifier
