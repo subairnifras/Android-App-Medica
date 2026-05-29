@@ -25,8 +25,7 @@ class MedicaViewModel(application: Application) : AndroidViewModel(application) 
     val currentUser: StateFlow<UserProfile?> = FirebaseManager.currentUserFlow
     val appointments: StateFlow<List<Appointment>> = FirebaseManager.appointmentsFlow
     val chats: StateFlow<List<Chat>> = FirebaseManager.chatsFlow
-
-    val doctors = FirebaseManager.doctorsList
+    val doctors: StateFlow<List<Doctor>> = FirebaseManager.doctorsListFlow
 
     // Booking Wizard temporary state
     var selectedDoctor: Doctor? = null
@@ -47,17 +46,17 @@ class MedicaViewModel(application: Application) : AndroidViewModel(application) 
 
     // Filter doctors by search query
     val filteredDoctors: StateFlow<List<Doctor>> = searchQuery
-        .combine(flowOf(doctors)) { query, docs ->
+        .combine(doctors) { query, docs ->
             if (query.isEmpty()) docs
             else docs.filter { it.name.contains(query, ignoreCase = true) || it.specialty.contains(query, ignoreCase = true) }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), doctors)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         // Initialize Firebase on start
         FirebaseManager.initialize(context)
 
-        // Sync with existing logged-in user or automatic local sandbox login if desired
+        // Sync with existing logged-in user
         viewModelScope.launch {
             currentUser.collect { profile ->
                 if (profile != null) {
@@ -94,7 +93,6 @@ class MedicaViewModel(application: Application) : AndroidViewModel(application) 
             password = password,
             onSuccess = {
                 Toast.makeText(context, "Registration Successful!", Toast.LENGTH_SHORT).show()
-                // Auto login is handled by FirebaseAuth state listener or simulated update
             },
             onFailure = { error ->
                 _authUiState.value = AuthUiState.Error(error)
@@ -106,18 +104,17 @@ class MedicaViewModel(application: Application) : AndroidViewModel(application) 
     // PROFILE FILL/UPDATE FLOW
     fun updateProfile(firstName: String, lastName: String, dob: String, gender: String) {
         val user = currentUser.value
-        val uid = user?.uid ?: "simulated_user_123"
-        val email = user?.email ?: "jameskelvin@gmail.com"
+        if (user == null) {
+            Toast.makeText(context, "No user logged in", Toast.LENGTH_SHORT).show()
+            return
+        }
 
         _authUiState.value = AuthUiState.Loading
-        val updatedProfile = UserProfile(
-            uid = uid,
-            email = email,
+        val updatedProfile = user.copy(
             firstName = firstName,
             lastName = lastName,
             dob = dob,
-            gender = gender,
-            profilePicUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200&auto=format&fit=crop"
+            gender = gender
         )
 
         FirebaseManager.saveUserProfile(updatedProfile, {
@@ -159,10 +156,10 @@ class MedicaViewModel(application: Application) : AndroidViewModel(application) 
     // APPOINTMENTS MANAGEMENT
     fun makeAppointment(onSuccess: () -> Unit) {
         val doc = selectedDoctor ?: return
-        val currentUserId = currentUser.value?.uid ?: "simulated_user_123"
+        val currentUserId = currentUser.value?.uid ?: return
 
         val appointment = Appointment(
-            id = "", // Generated in FirebaseManager
+            id = "", 
             userId = currentUserId,
             doctorId = doc.id,
             doctorName = doc.name,
@@ -196,9 +193,8 @@ class MedicaViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun modifyAppointmentStatus(appointmentId: String, status: String) {
-        FirebaseManager.updateAppointmentStatus(appointmentId, status, {
-            Toast.makeText(context, "Appointment marked as $status", Toast.LENGTH_SHORT).show()
-        })
+        FirebaseManager.updateAppointmentStatus(appointmentId, status)
+        Toast.makeText(context, "Appointment marked as $status", Toast.LENGTH_SHORT).show()
     }
 
     // MESSAGING API
