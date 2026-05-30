@@ -1,21 +1,58 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Medica - Healthcare Management App
 
-# Run and deploy your AI Studio app
+Medica is a modern, full-stack Android application designed to provide a seamless experience for patients to connect with healthcare providers. Built with Jetpack Compose and powered by Firebase, it offers a robust platform for doctor discovery, appointment scheduling, and real-time communication.
 
-This contains everything you need to run your app locally.
+##  Key Features
 
-View your app in AI Studio: https://ai.studio/apps/d12a3d8a-3d05-49c9-820a-b8c0dad728ab
+*   **Secure Authentication:** Integrated with Firebase Authentication for safe and easy sign-in using email and password.
+*   **User Profiles:** personalized onboarding flow to capture patient details, persisted in Cloud Firestore.
+*   **Doctor Discovery:** 
+    *   Search and filter doctors by name or specialty.
+    *   Detailed doctor profiles including ratings, experience, and patient reviews.
+*   **Advanced Booking System:** 
+    *   Multi-step wizard for choosing dates, time slots, and patient info.
+    *   Flexible consultation packages: Message, Voice Call, and Video Call.
+*   **Appointment Management:** 
+    *   Real-time tracking of Upcoming, Completed, and Cancelled appointments.
+    *   In-app cancellation and rescheduling capabilities.
+*   **Real-time Messaging:** Direct chat communication with doctors powered by Firestore real-time listeners.
+*   **Notifications:** Visual cues for new messages and upcoming visits.
 
-## Run Locally
+##  Tech Stack
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+*   **Language:** Kotlin (2.0.21)
+*   **UI Framework:** Jetpack Compose (Modern Declarative UI)
+*   **Backend:** 
+    *   **Firebase Authentication:** User identity management.
+    *   **Cloud Firestore:** Real-time NoSQL database for profiles, appointments, and chats.
+*   **Architecture:** MVVM (Model-View-ViewModel) for clean separation of concerns.
+*   **Networking & Image Loading:** 
+    *   **Coil:** Asynchronous image loading for profile and doctor pictures.
+*   **Concurrency:** Kotlin Coroutines & StateFlow for reactive data handling.
 
+##  Project Structure
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+*   `app/src/main/java/com/example/data/`: Data models and `FirebaseManager` (central API engine).
+*   `app/src/main/java/com/example/ui/`: UI components, including `MedicaViewModel` and Compose screens.
+*   `app/src/main/java/com/example/ui/theme/`: Custom branding, color schemes, and typography.
+*   `app/src/google-services.json`: Firebase configuration file.
+
+##  Getting Started
+
+### Prerequisites
+*   Android Studio Ladybug or newer.
+*   JDK 11+.
+*   A Firebase project with **Authentication** (Email/Password) and **Firestore** enabled.
+
+### Installation
+1.  Clone the repository.
+2.  Add your `google-services.json` to the `app/` directory.
+3.  Sync Gradle and run the app on an emulator or physical device.
+
+##  Recent Updates
+*   Migrated from simulated local state to live Firebase Cloud Firestore integration.
+*   Standardized dependency versions for Kotlin 2.0.21 compatibility.
+*   Integrated custom branding and adaptive launcher icons.
+
+---
+*Created as part of the Medica UX development initiative.*
